@@ -36,6 +36,7 @@ import com.thoughtcrime.v2raylite.model.MainViewModel
 import com.thoughtcrime.v2raylite.ui.MainScreen
 import com.thoughtcrime.v2raylite.ui.theme.Purple700
 import com.thoughtcrime.v2raylite.ui.theme.V2rayLiteTheme
+import com.thoughtcrime.v2raylite.util.MmkvManager
 
 class MainActivity : ComponentActivity() {
 
@@ -87,5 +88,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.reloadServerList()
     }
 }

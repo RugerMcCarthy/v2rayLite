@@ -57,7 +57,7 @@ import com.thoughtcrime.v2raylite.model.MainViewModel
 @Composable
 fun MainScreen(viewModel: MainViewModel, scaffoldState: ScaffoldState) {
     LaunchedEffect(viewModel.nextSelectedNodeIndex) {
-        viewModel.execChangeNodeTransitionAnim()
+        viewModel.changeNode()
     }
     Box(
         modifier = Modifier
@@ -88,7 +88,7 @@ fun MainScreen(viewModel: MainViewModel, scaffoldState: ScaffoldState) {
                     )
                     .padding(bottom = 25.dp)
             ) {
-                NodeSelectBar()
+                NodeSelectBar(viewModel)
             }
         }
     }
@@ -139,7 +139,6 @@ fun NodeInfoBlock(viewModel: MainViewModel, nodeState: NodeState){
 
 @Composable
 fun BoxScope.NodeSelectStatus(nodeState: NodeState) {
-
     Box(modifier = Modifier
         .align(Alignment.BottomCenter)
         .fillMaxWidth()
@@ -164,15 +163,17 @@ fun BoxScope.NodeSelectStatus(nodeState: NodeState) {
     }
 }
 
-@Preview
+
 @Composable
-fun NodeSelectBar() {
+fun NodeSelectBar(viewModel: MainViewModel) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Button(
-            onClick = {},
+            onClick = {
+                viewModel.generateV2rayNodeConfig()
+            },
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = MaterialTheme.colors.onBackground
             ),
@@ -182,7 +183,7 @@ fun NodeSelectBar() {
                 .weight(0.5f)
         ) {
             Text(
-                text = "添加节点",
+                text = "更新订阅",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.W900,
                 color = Color.White,
@@ -191,7 +192,9 @@ fun NodeSelectBar() {
         
         Spacer(modifier = Modifier.width(10.dp))
         Button(
-            onClick = {},
+            onClick = {
+
+            },
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = MaterialTheme.colors.onBackground
             ),
@@ -201,7 +204,7 @@ fun NodeSelectBar() {
                 .weight(0.5f)
         ) {
             Text(
-                text = "启动代理",
+                text = if (!viewModel.isRunning) "启动代理" else "停止",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.W900,
                 color = Color.White,
