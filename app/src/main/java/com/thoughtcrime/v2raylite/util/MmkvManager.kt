@@ -7,6 +7,10 @@ import com.thoughtcrime.v2raylite.bean.ServerConfig
 object MmkvManager {
     const val ID_MAIN = "MAIN"
     const val ID_SERVER_CONFIG = "SERVER_CONFIG"
+    const val ID_SERVER_RAW = "SERVER_RAW"
+    const val ID_SERVER_AFF = "SERVER_AFF"
+    const val ID_SUB = "SUB"
+    const val ID_SETTING = "SETTING"
     const val KEY_SELECTED_SERVER = "SELECTED_SERVER"
     const val KEY_ANG_CONFIGS = "ANG_CONFIGS"
 

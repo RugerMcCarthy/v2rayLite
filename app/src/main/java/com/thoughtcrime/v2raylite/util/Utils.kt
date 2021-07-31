@@ -1,5 +1,7 @@
 package com.thoughtcrime.v2raylite.util
 
+import android.content.Context
+import com.thoughtcrime.v2raylite.bean.AppConfig
 import java.util.*
 
 object Utils {
@@ -16,6 +18,52 @@ object Utils {
         }
     }
 
+
+    /**
+     * is ip address
+     */
+    fun isIpAddress(value: String): Boolean {
+        try {
+            var addr = value
+            if (addr.isEmpty() || addr.isBlank()) {
+                return false
+            }
+            //CIDR
+            if (addr.indexOf("/") > 0) {
+                val arr = addr.split("/")
+                if (arr.count() == 2 && Integer.parseInt(arr[1]) > 0) {
+                    addr = arr[0]
+                }
+            }
+
+            // "::ffff:192.168.173.22"
+            // "[::ffff:192.168.173.22]:80"
+            if (addr.startsWith("::ffff:") && '.' in addr) {
+                addr = addr.drop(7)
+            } else if (addr.startsWith("[::ffff:") && '.' in addr) {
+                addr = addr.drop(8).replace("]", "")
+            }
+
+            // addr = addr.toLowerCase()
+            var octets = addr.split('.').toTypedArray()
+            if (octets.size == 4) {
+                if(octets[3].indexOf(":") > 0) {
+                    addr = addr.substring(0, addr.indexOf(":"))
+                }
+                return isIpv4Address(addr)
+            }
+
+            // Ipv6addr [2001:abc::123]:8080
+            return isIpv6Address(addr)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+    }
+    
+    fun isPureIpAddress(value: String): Boolean {
+        return (isIpv4Address(value) || isIpv6Address(value))
+    }
 
     fun isIpv4Address(value: String): Boolean {
         val regV4 = Regex("^([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\\.([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\\.([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\\.([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])$")
@@ -43,4 +91,61 @@ object Utils {
             return 0
         }
     }
+
+
+    /**
+     * package path
+     */
+    fun packagePath(context: Context): String {
+        var path = context.filesDir.toString()
+        path = path.replace("files", "")
+        //path += "tun2socks"
+
+        return path
+    }
+
+
+    fun getVpnDnsServers(): List<String> {
+        val vpnDns = AppConfig.DNS_AGENT
+        return vpnDns.split(",").filter { isPureIpAddress(it) }
+        // allow empty, in that case dns will use system default
+    }
+
+
+    /**
+     * readTextFromAssets
+     */
+    fun readTextFromAssets(context: Context, fileName: String): String {
+        val content = context.assets.open(fileName).bufferedReader().use {
+            it.readText()
+        }
+        return content
+    }
+
+
+    /**
+     * get remote dns servers from preference
+     */
+    fun getRemoteDnsServers(): List<String> {
+        val remoteDns = AppConfig.DNS_AGENT
+        val ret = remoteDns.split(",").filter { isPureIpAddress(it) || it.startsWith("https") }
+        if (ret.isEmpty()) {
+            return listOf(AppConfig.DNS_AGENT)
+        }
+        return ret
+    }
+
+
+    /**
+     * get remote dns servers from preference
+     */
+    fun getDomesticDnsServers(): List<String> {
+        val domesticDns = AppConfig.DNS_DIRECT
+        val ret = domesticDns.split(",").filter { isPureIpAddress(it) || it.startsWith("https") }
+        if (ret.isEmpty()) {
+            return listOf(AppConfig.DNS_DIRECT)
+        }
+        return ret
+    }
+
 }

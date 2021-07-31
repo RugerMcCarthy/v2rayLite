@@ -1,5 +1,11 @@
 package com.thoughtcrime.v2raylite.model
 
+import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.VpnService
 import android.util.Log
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.getValue
@@ -7,8 +13,13 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import com.tencent.mmkv.MMKV
+import com.thoughtcrime.v2raylite.App
+import com.thoughtcrime.v2raylite.MainActivity
+import com.thoughtcrime.v2raylite.R
+import com.thoughtcrime.v2raylite.bean.AppConfig
 import com.thoughtcrime.v2raylite.bean.EConfigType
 import com.thoughtcrime.v2raylite.bean.NodeConfig
 import com.thoughtcrime.v2raylite.bean.NodeInfo
@@ -16,10 +27,23 @@ import com.thoughtcrime.v2raylite.bean.NodeSelectStatus
 import com.thoughtcrime.v2raylite.bean.NodeState
 import com.thoughtcrime.v2raylite.bean.ServerConfig
 import com.thoughtcrime.v2raylite.bean.V2rayConfig
+import com.thoughtcrime.v2raylite.service.V2RayServiceManager
+import com.thoughtcrime.v2raylite.util.MessageUtil
 import com.thoughtcrime.v2raylite.util.MmkvManager
 import com.thoughtcrime.v2raylite.util.Utils
+import com.thoughtcrime.v2raylite.util.toast
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 
-class MainViewModel: ViewModel() {
+class MainViewModel(application: Application): AndroidViewModel(application) {
     val ID_MAIN = "MAIN"
     val ID_SERVER_CONFIG = "SERVER_CONFIG"
     val KEY_SELECTED_SERVER = "SELECTED_SERVER"
@@ -36,6 +60,32 @@ class MainViewModel: ViewModel() {
     var nodeStateList = mutableStateListOf<NodeState>()
 
     var isRunning: Boolean by mutableStateOf(false)
+    private set
+
+    private var _vpnEventFlow = MutableStateFlow(false)
+    var vpnEventFlow = _vpnEventFlow.asStateFlow()
+
+    private val mMsgReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            when (intent?.getIntExtra("key", 0)) {
+                AppConfig.MSG_STATE_RUNNING -> {
+                    isRunning = true
+                }
+                AppConfig.MSG_STATE_NOT_RUNNING -> {
+                    isRunning = false
+                }
+                AppConfig.MSG_STATE_START_SUCCESS -> {
+                    isRunning = true
+                }
+                AppConfig.MSG_STATE_START_FAILURE -> {
+                    isRunning = false
+                }
+                AppConfig.MSG_STATE_STOP_SUCCESS -> {
+                    isRunning = false
+                }
+            }
+        }
+    }
 
     var weakNodeConfigList = listOf<NodeConfig>(
         NodeConfig(
@@ -61,21 +111,44 @@ class MainViewModel: ViewModel() {
         )
     )
 
-    suspend fun changeNode() {
+    fun startListenBroadcast() {
+        getApplication<App>().registerReceiver(mMsgReceiver, IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY))
+        MessageUtil.sendMsg2Service(getApplication(), AppConfig.MSG_REGISTER_CLIENT, "")
+    }
+
+    override fun onCleared() {
+        getApplication<App>().unregisterReceiver(mMsgReceiver)
+        super.onCleared()
+    }
+
+    suspend fun changeProxyNode(context: Context) {
         if (currentSelectedNodeIndex == nextSelectedNodeIndex) {
             return
         }
-        execChangeNodeTransitionAnim()
-        var guid = nodeStateList[currentSelectedNodeIndex].nodeInfo.guid
-        mainStorage?.encode(MmkvManager.KEY_SELECTED_SERVER, guid)
-        Log.d("gzz", "change $guid")
+        if (processChangeProxyNodeState(context)) {
+            var guid = nodeStateList[currentSelectedNodeIndex].nodeInfo.guid
+            mainStorage?.encode(MmkvManager.KEY_SELECTED_SERVER, guid)
+        }
+
+        // Log.d("gzz", "change $guid")
     }
 
-    private suspend fun execChangeNodeTransitionAnim() {
-        if (nodeStateList.size == 0) return
+    private suspend fun processChangeProxyNodeState(context: Context): Boolean {
+        if (nodeStateList.size == 0) return false
         nodeStateList[currentSelectedNodeIndex].unSelect()
-        currentSelectedNodeIndex = nextSelectedNodeIndex
-        nodeStateList[currentSelectedNodeIndex].select()
+        if (isRunning) {
+            withContext(Dispatchers.Main) {
+                stopV2Ray(context)
+                delay(500)
+                startV2Ray(context)
+                currentSelectedNodeIndex = nextSelectedNodeIndex
+                nodeStateList[currentSelectedNodeIndex].select()
+            }
+        } else {
+            currentSelectedNodeIndex = nextSelectedNodeIndex
+            nodeStateList[currentSelectedNodeIndex].select()
+        }
+        return true
     }
 
     fun generateV2rayNodeConfig() {
@@ -132,7 +205,9 @@ class MainViewModel: ViewModel() {
     }
 
     fun reloadServerList() {
+        nodeStateList.clear()
         var serverList = MmkvManager.decodeServerList()
+        var selectedGuid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)
         serverList.forEach { guid ->
             MmkvManager.decodeServerConfig(guid)?.let {
                 nodeStateList.add(
@@ -142,11 +217,13 @@ class MainViewModel: ViewModel() {
                             guid = guid
                         ),
                         nodeIndex = nodeStateList.size,
-                        selectStatus = if (nodeStateList.isEmpty()) NodeSelectStatus.Selected else NodeSelectStatus.Unselected
+                        selectStatus = if (selectedGuid == guid) NodeSelectStatus.Selected else NodeSelectStatus.Unselected
                     ).also {
                         if (it.isSelected()) {
                             Log.d("gzz", "reload $guid")
                             mainStorage?.encode(MmkvManager.KEY_SELECTED_SERVER, guid)
+                            currentSelectedNodeIndex = it.nodeIndex
+                            nextSelectedNodeIndex = it.nodeIndex
                         }
                     }
                 )
@@ -162,6 +239,20 @@ class MainViewModel: ViewModel() {
         nodeStateList.clear()
         currentSelectedNodeIndex = 0
         nextSelectedNodeIndex = 0
+    }
+
+    fun toggleVpn() {
+        _vpnEventFlow.value = !isRunning
+    }
+
+    fun startV2Ray(context: Context) {
+        V2RayServiceManager.startV2Ray(context)
+    }
+
+    fun stopV2Ray(context: Context) {
+        if (!isRunning) return
+        context.toast(R.string.toast_services_stop)
+        MessageUtil.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
     }
 
 }

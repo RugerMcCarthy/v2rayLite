@@ -1,5 +1,8 @@
 package com.thoughtcrime.v2raylite.bean
 
+import com.thoughtcrime.v2raylite.bean.AppConfig.TAG_AGENT
+import com.thoughtcrime.v2raylite.bean.AppConfig.TAG_BLOCKED
+import com.thoughtcrime.v2raylite.bean.AppConfig.TAG_DIRECT
 import com.thoughtcrime.v2raylite.util.Utils
 
 data class ServerConfig(
@@ -43,5 +46,26 @@ data class ServerConfig(
             return outboundBean
         }
         return fullConfig?.getProxyOutbound()
+    }
+
+
+    fun getAllOutboundTags(): MutableList<String> {
+        if (configType != EConfigType.CUSTOM) {
+            return mutableListOf(TAG_AGENT, TAG_DIRECT, TAG_BLOCKED)
+        }
+        fullConfig?.let { config ->
+            return config.outbounds.map { it.tag }.toMutableList()
+        }
+        return mutableListOf()
+    }
+
+    fun getV2rayPointDomainAndPort(): String {
+        val address = getProxyOutbound()?.getServerAddress().orEmpty()
+        val port = getProxyOutbound()?.getServerPort()
+        return if (Utils.isIpv6Address(address)) {
+            String.format("[%s]:%s", address, port)
+        } else {
+            String.format("%s:%s", address, port)
+        }
     }
 }

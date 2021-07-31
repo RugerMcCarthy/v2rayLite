@@ -56,8 +56,9 @@ import com.thoughtcrime.v2raylite.model.MainViewModel
 @ExperimentalFoundationApi
 @Composable
 fun MainScreen(viewModel: MainViewModel, scaffoldState: ScaffoldState) {
+    var context = LocalContext.current
     LaunchedEffect(viewModel.nextSelectedNodeIndex) {
-        viewModel.changeNode()
+        viewModel.changeProxyNode(context)
     }
     Box(
         modifier = Modifier
@@ -193,7 +194,7 @@ fun NodeSelectBar(viewModel: MainViewModel) {
         Spacer(modifier = Modifier.width(10.dp))
         Button(
             onClick = {
-
+                viewModel.toggleVpn()
             },
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = MaterialTheme.colors.onBackground
@@ -204,7 +205,7 @@ fun NodeSelectBar(viewModel: MainViewModel) {
                 .weight(0.5f)
         ) {
             Text(
-                text = if (!viewModel.isRunning) "启动代理" else "停止",
+                text = if (!viewModel.isRunning) "启动" else "停止",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.W900,
                 color = Color.White,
