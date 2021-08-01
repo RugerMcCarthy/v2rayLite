@@ -1,17 +1,27 @@
 package com.thoughtcrime.v2raylite.bean
 
+import com.google.gson.annotations.SerializedName
+
 data class NodeConfig(
-    val remarks: String,
-    val address: String,
-    val port: String,
-    var uuid: String,
-    var alterid: String,
-    var transport: String = "tcp",
-    var headerType: String = "none",
-    val requestHost: String = "",
+    var v: String = "2",
+    var ps: String,
+    var add: String,
+    var port: String,
+    var id: String,
+    var aid: String,
+    var net: String = "tcp",
+    var type: String = "none",
+    var host: String = "",
     var path: String = "",
     var allowInsecure: Boolean = false,
-    var streamSecurity: String = "",
-    var security: String = "chacha20-poly1305",
-    val configType: EConfigType = EConfigType.VMESS
-)
+    var _streamSecurity: String? = null,
+    var _security: String? = null,
+    var _configType: EConfigType? = null
+) {
+    val streamSecurity
+        get() = _streamSecurity ?:""
+    val security
+        get() = _security?:"chacha20-poly1305"
+    val configType
+        get() = _configType?: EConfigType.VMESS
+}

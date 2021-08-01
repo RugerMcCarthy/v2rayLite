@@ -84,8 +84,6 @@ object V2RayServiceManager {
     private class V2RayCallback : V2RayVPNServiceSupportsSet {
         override fun shutdown(): Long {
             val serviceControl = serviceControl?.get() ?: return -1
-            // called by go
-            // shutdown the whole vpn service
             return try {
                 serviceControl.stopService()
                 0
@@ -105,13 +103,11 @@ object V2RayServiceManager {
         }
 
         override fun onEmitStatus(l: Long, s: String?): Long {
-            //Logger.d(s)
             return 0
         }
 
         override fun setup(s: String): Long {
             val serviceControl = serviceControl?.get() ?: return -1
-            //Logger.d(s)
             return try {
                 serviceControl.startService(s)
                 lastQueryTime = System.currentTimeMillis()
@@ -248,8 +244,6 @@ object V2RayServiceManager {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     createNotificationChannel()
                 } else {
-                    // If earlier version channel ID is not used
-                    // https://developer.android.com/reference/android/support/v4/app/NotificationCompat.Builder.html#NotificationCompat.Builder(android.content.Context)
                     ""
                 }
 
@@ -264,9 +258,6 @@ object V2RayServiceManager {
                 .addAction(R.drawable.ic_close_grey_800_24dp,
                         service.getString(R.string.notification_action_stop_v2ray),
                         stopV2RayPendingIntent)
-        //.build()
-
-        //mBuilder?.setDefaults(NotificationCompat.FLAG_ONLY_ALERT_ONCE)  //取消震动,铃声其他都不好使
 
         service.startForeground(NOTIFICATION_ID, mBuilder?.build())
     }

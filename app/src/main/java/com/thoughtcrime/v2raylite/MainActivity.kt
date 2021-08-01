@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
                                     .height(50.dp)
                                     .background(MaterialTheme.colors.primary)) {
                                 Text(
-                                    text = "完全自主研发，打破国外垄断",
+                                    text = "v2ray青春版",
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.W500,
                                     color = Color.White,

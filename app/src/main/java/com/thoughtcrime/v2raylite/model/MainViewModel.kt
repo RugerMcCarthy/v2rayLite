@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.tencent.mmkv.MMKV
 import com.thoughtcrime.v2raylite.App
 import com.thoughtcrime.v2raylite.MainActivity
@@ -42,6 +44,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import java.io.StringReader
+
+data class DeleteProxyNodeDialogState(val isShow: Boolean, val deleteNodeIndex: Int = - 1)
 
 class MainViewModel(application: Application): AndroidViewModel(application) {
     val ID_MAIN = "MAIN"
@@ -51,6 +56,12 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
 
     val mainStorage by lazy { MMKV.mmkvWithID(ID_MAIN, MMKV.MULTI_PROCESS_MODE) }
     val serverStorage by lazy { MMKV.mmkvWithID(ID_SERVER_CONFIG, MMKV.MULTI_PROCESS_MODE) }
+
+    var urlCheckDialogState by mutableStateOf(false)
+    private set
+
+    var deleteProxyNodeDiaglogState by mutableStateOf(DeleteProxyNodeDialogState(false, -1))
+    private set
 
     var currentSelectedNodeIndex = 0
     private set
@@ -63,6 +74,7 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
     private set
 
     private var _vpnEventFlow = MutableStateFlow(false)
+
     var vpnEventFlow = _vpnEventFlow.asStateFlow()
 
     private val mMsgReceiver = object : BroadcastReceiver() {
@@ -86,30 +98,6 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
             }
         }
     }
-
-    var weakNodeConfigList = listOf<NodeConfig>(
-        NodeConfig(
-            remarks = "俄罗斯",
-            address = "zz.ru1v.se.sx.cn",
-            port = "7001",
-            alterid = "1",
-            uuid = "f5262b6f-712c-37b9-aebb-2504a8087075"
-        ),
-        NodeConfig(
-            remarks = "台湾",
-            address = "zz.tw1v.se.sx.cn",
-            port = "5001",
-            alterid = "1",
-            uuid = "f5262b6f-712c-37b9-aebb-2504a8087075"
-        ),
-        NodeConfig(
-            remarks = "新加坡",
-            address = "zz.sg1v.se.sx.cn",
-            port = "3001",
-            alterid = "1",
-            uuid = "f5262b6f-712c-37b9-aebb-2504a8087075"
-        )
-    )
 
     fun startListenBroadcast() {
         getApplication<App>().registerReceiver(mMsgReceiver, IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY))
@@ -151,11 +139,11 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
         return true
     }
 
-    fun generateV2rayNodeConfig() {
-        removeServerList()
-        weakNodeConfigList.forEach {
+    fun generateV2rayNodeConfig(nodeConfigList: List<NodeConfig>) {
+        // removeServerList()
+        nodeConfigList.forEach {
             val config = ServerConfig.create(it.configType)
-            config.remarks = it.remarks
+            config.remarks = it.ps
             config.outboundBean?.settings?.vnext?.get(0)?.let { vnext ->
                 saveVnext(vnext, config, it)
             }
@@ -177,23 +165,23 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
     }
 
     private fun saveVnext(vnext: V2rayConfig.OutboundBean.OutSettingsBean.VnextBean, serverConfig: ServerConfig, nodeConfig: NodeConfig) {
-        vnext.address = nodeConfig.address.trim()
+        vnext.address = nodeConfig.add.trim()
         vnext.port = Utils.parseInt(nodeConfig.port)
-        vnext.users[0].id = nodeConfig.uuid.trim()
-        vnext.users[0].alterId = Utils.parseInt(nodeConfig.alterid)
+        vnext.users[0].id = nodeConfig.id.trim()
+        vnext.users[0].alterId = Utils.parseInt(nodeConfig.aid)
         vnext.users[0].security = nodeConfig.security
     }
 
     private fun saveStreamSettings(streamSetting: V2rayConfig.OutboundBean.StreamSettingsBean, serverConfig: ServerConfig, nodeConfig: NodeConfig) {
         var sni = streamSetting.populateTransportSettings(
-            transport = nodeConfig.transport,
-            headerType = nodeConfig.headerType,
-            host = nodeConfig.requestHost,
+            transport = nodeConfig.net,
+            headerType = nodeConfig.net,
+            host = nodeConfig.host,
             path = nodeConfig.path,
             seed = nodeConfig.path,
-            quicSecurity = nodeConfig.requestHost,
+            quicSecurity = nodeConfig.host,
             key = nodeConfig.path,
-            mode = nodeConfig.headerType,
+            mode = nodeConfig.type,
             serviceName = nodeConfig.path
         )
 
@@ -205,6 +193,11 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
     }
 
     fun reloadServerList() {
+        nodeStateList.forEach {
+            if (it.isDeleted) {
+                MmkvManager.removeServer(it.nodeInfo.guid)
+            }
+        }
         nodeStateList.clear()
         var serverList = MmkvManager.decodeServerList()
         var selectedGuid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)
@@ -231,7 +224,7 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
         }
     }
 
-    fun removeServerList() {
+    private fun removeServerList() {
         var serverList = MmkvManager.decodeServerList()
         serverList.forEach { guid ->
             MmkvManager.removeServer(guid)
@@ -255,4 +248,40 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
         MessageUtil.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
     }
 
+    fun showUrlCheckDialog() {
+        urlCheckDialogState = true
+    }
+
+    fun hideUrlCheckDialog() {
+        urlCheckDialogState = false
+    }
+
+    fun showDeleteProxyNodeDialog(context: Context, deleteNodeIndex: Int) {
+        if (currentSelectedNodeIndex == deleteNodeIndex) {
+            context.toast("不能删除已选中的节点")
+            return
+        }
+        deleteProxyNodeDiaglogState = DeleteProxyNodeDialogState(true, deleteNodeIndex)
+    }
+
+    fun hideDeleteProxyNodeDialog() {
+        deleteProxyNodeDiaglogState = DeleteProxyNodeDialogState(false)
+    }
+
+    fun deleteProxyNode(deleteNodeIndex: Int) {
+        nodeStateList[deleteNodeIndex].delete()
+    }
+
+    fun parseURl(base64configInfo: String): Boolean {
+        var configInfoJson = Utils.base64Decode(base64configInfo)
+        try {
+            var config = Gson().fromJson(configInfoJson, NodeConfig::class.java)
+            generateV2rayNodeConfig(listOf(config))
+            // Log.d("gzz", "${configs.toString()}")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+        return true
+    }
 }

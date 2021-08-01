@@ -5,15 +5,6 @@ plugins {
 
 android {
 
-    signingConfigs {
-        android_app {
-            keyAlias 'v2ray_lite'
-            storeFile file('/Users/ruger/Tools/v2ray_lite.keystore')
-            keyPassword 'gzz3897911'
-            storePassword 'gzz3897911'
-        }
-    }
-
     compileSdk 30
     buildToolsVersion "30.0.3"
 

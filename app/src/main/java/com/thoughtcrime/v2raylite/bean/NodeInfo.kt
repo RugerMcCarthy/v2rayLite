@@ -21,6 +21,8 @@ sealed class NodeSelectStatus {
 data class NodeInfo(val remark: String, val guid: String = "")
 
 class NodeState(val nodeInfo: NodeInfo, val nodeIndex: Int, selectStatus: NodeSelectStatus = NodeSelectStatus.Unselected) {
+    var isDeleted by mutableStateOf(false)
+
     var selectStatus: NodeSelectStatus by mutableStateOf(selectStatus)
     private set
 
@@ -42,6 +44,10 @@ class NodeState(val nodeInfo: NodeInfo, val nodeIndex: Int, selectStatus: NodeSe
             40.dp,
             tween(250)
         )
+    }
+
+    fun delete() {
+        isDeleted = true
     }
 }
 

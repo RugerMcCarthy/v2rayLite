@@ -32,15 +32,6 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
 
     private lateinit var mInterface: ParcelFileDescriptor
 
-    /**
-     * Unfortunately registerDefaultNetworkCallback is going to return our VPN interface: https://android.googlesource.com/platform/frameworks/base/+/dda156ab0c5d66ad82bdcf76cda07cbc0a9c8a2e
-     *
-     * This makes doing a requestNetwork with REQUEST necessary so that we don't get ALL possible networks that
-     * satisfies default network capabilities but only THE default network. Unfortunately we need to have
-     * android.permission.CHANGE_NETWORK_STATE to be able to call requestNetwork.
-     *
-     * Source: https://android.googlesource.com/platform/frameworks/base/+/2df4c7d/services/core/java/com/android/server/ConnectivityService.java#887
-     */
     @delegate:RequiresApi(Build.VERSION_CODES.P)
     private val defaultNetworkRequest by lazy {
         NetworkRequest.Builder()
@@ -96,8 +87,6 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
             return
         }
 
-        // If the old interface has exactly the same parameters, use it!
-        // Configure a builder while parsing the parameters.
         val builder = Builder()
         val enableLocalDns = settingsStorage?.decodeBool(AppConfig.PREF_LOCAL_DNS_ENABLED) ?: false
         val routingMode = settingsStorage?.decodeString(AppConfig.PREF_ROUTING_MODE) ?: "0"
@@ -149,16 +138,13 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
                     else
                         builder.addAllowedApplication(it)
                 } catch (e: PackageManager.NameNotFoundException) {
-                    //Logger.d(e)
                 }
             }
         }
 
-        // Close the old interface since the parameters have been changed.
         try {
             mInterface.close()
         } catch (ignored: Exception) {
-            // ignored
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -173,11 +159,9 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
             builder.setMetered(false)
         }
 
-        // Create a new interface using the builder and save the parameters.
         try {
             mInterface = builder.establish()!!
         } catch (e: Exception) {
-            // non-nullable lateinit var
             e.printStackTrace()
             stopV2Ray()
         }
@@ -211,36 +195,24 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         V2RayServiceManager.startV2rayPoint()
         return START_STICKY
-        //return super.onStartCommand(intent, flags, startId)
     }
 
     private fun stopV2Ray(isForced: Boolean = true) {
-//        val configName = defaultDPreference.getPrefString(PREF_CURR_CONFIG_GUID, "")
-//        val emptyInfo = VpnNetworkInfo()
-//        val info = loadVpnNetworkInfo(configName, emptyInfo)!! + (lastNetworkInfo ?: emptyInfo)
-//        saveVpnNetworkInfo(configName, info)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 connectivity.unregisterNetworkCallback(defaultNetworkCallback)
             } catch (ignored: Exception) {
-                // ignored
             }
         }
 
         V2RayServiceManager.stopV2rayPoint()
 
         if (isForced) {
-            //stopSelf has to be called ahead of mInterface.close(). otherwise v2ray core cannot be stooped
-            //It's strage but true.
-            //This can be verified by putting stopself() behind and call stopLoop and startLoop
-            //in a row for several times. You will find that later created v2ray core report port in use
-            //which means the first v2ray core somehow failed to stop and release the port.
             stopSelf()
 
             try {
                 mInterface.close()
             } catch (ignored: Exception) {
-                // ignored
             }
 
         }

@@ -1,6 +1,7 @@
 package com.thoughtcrime.v2raylite.util
 
 import android.content.Context
+import android.util.Base64
 import com.thoughtcrime.v2raylite.bean.AppConfig
 import java.util.*
 
@@ -146,6 +147,10 @@ object Utils {
             return listOf(AppConfig.DNS_DIRECT)
         }
         return ret
+    }
+
+    fun base64Decode(str: String): String {
+        return String(Base64.decode(str, Base64.DEFAULT))
     }
 
 }
