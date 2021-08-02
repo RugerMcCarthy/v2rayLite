@@ -4,8 +4,8 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         jcenter() // Warning: this repository is going to shut down soon
-        flatDir { dirs 'libs' }
+        flatDir { dirs("libs") }
     }
 }
 rootProject.name = "v2rayLite"
-include ':app'
+include (":app")
