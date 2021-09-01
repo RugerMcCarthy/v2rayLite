@@ -4,15 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Snackbar
@@ -21,6 +20,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusModifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,16 +32,14 @@ import com.google.accompanist.insets.LocalWindowInsets
 import com.google.accompanist.insets.ProvideWindowInsets
 import com.google.accompanist.insets.rememberInsetsPaddingValues
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
-import com.thoughtcrime.v2raylite.bean.AppConfig
 import com.thoughtcrime.v2raylite.model.MainViewModel
-import com.thoughtcrime.v2raylite.service.V2RayServiceManager
 import com.thoughtcrime.v2raylite.ui.MainScreen
 import com.thoughtcrime.v2raylite.ui.theme.V2rayLiteTheme
-import com.thoughtcrime.v2raylite.util.MessageUtil
-import com.thoughtcrime.v2raylite.util.toast
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_CODE_VPN_PREPARE = 0
@@ -49,6 +47,7 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
+    @ExperimentalAnimationApi
     @ExperimentalFoundationApi
     @ExperimentalAnimatedInsets
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,14 +66,24 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             V2rayLiteTheme(true) {
-                var scaffoldState = rememberScaffoldState()
+                var scaffoldState = rememberScaffoldState().also {
+                    viewModel.scaffoldState = it
+                }
                 var systemUiController = rememberSystemUiController()
-                systemUiController.setStatusBarColor(MaterialTheme.colors.primary, true)
+                systemUiController.setStatusBarColor(Color.White, true)
+                systemUiController.setNavigationBarColor(MaterialTheme.colors.primary, true)
                 ProvideWindowInsets(windowInsetsAnimationsEnabled = true) {
                     Scaffold(
                         scaffoldState = scaffoldState,
                         snackbarHost = {
-                            SnackbarHost(it) { data ->
+                            SnackbarHost(
+                                it,
+                                modifier = Modifier.padding(
+                                    paddingValues = rememberInsetsPaddingValues(
+                                        insets = LocalWindowInsets.current.navigationBars
+                                    )
+                                )
+                            ) { data ->
                                 Snackbar(
                                     snackbarData = data
                                 )
@@ -85,12 +94,12 @@ class MainActivity : ComponentActivity() {
                                 Modifier
                                     .fillMaxWidth()
                                     .height(50.dp)
-                                    .background(MaterialTheme.colors.primary)) {
+                                    .background(Color.White)) {
                                 Text(
                                     text = "v2ray青春版",
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.W500,
-                                    color = Color.White,
+                                    color = Color.Black,
                                     modifier = Modifier.align(Alignment.Center),
                                 )
                             }
@@ -101,7 +110,7 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                     ) {
-                        MainScreen(viewModel, scaffoldState)
+                        MainScreen(viewModel)
                     }
                 }
             }
@@ -111,6 +120,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.reloadServerList()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        viewModel.clearDeletedNode()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

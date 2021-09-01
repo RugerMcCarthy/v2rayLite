@@ -8,13 +8,12 @@ import android.content.IntentFilter
 import android.net.VpnService
 import android.util.Log
 import androidx.compose.animation.core.tween
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.material.ScaffoldState
+import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.tencent.mmkv.MMKV
@@ -29,38 +28,47 @@ import com.thoughtcrime.v2raylite.bean.NodeSelectStatus
 import com.thoughtcrime.v2raylite.bean.NodeState
 import com.thoughtcrime.v2raylite.bean.ServerConfig
 import com.thoughtcrime.v2raylite.bean.V2rayConfig
+import com.thoughtcrime.v2raylite.network.CardPlatformRepo
 import com.thoughtcrime.v2raylite.service.V2RayServiceManager
 import com.thoughtcrime.v2raylite.util.MessageUtil
 import com.thoughtcrime.v2raylite.util.MmkvManager
 import com.thoughtcrime.v2raylite.util.Utils
 import com.thoughtcrime.v2raylite.util.toast
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.delay
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.io.StringReader
+import javax.inject.Inject
 
 data class DeleteProxyNodeDialogState(val isShow: Boolean, val deleteNodeIndex: Int = - 1)
 
-class MainViewModel(application: Application): AndroidViewModel(application) {
+@HiltViewModel
+class MainViewModel @Inject constructor(application: Application, private val cardPlatformRepo: CardPlatformRepo): AndroidViewModel(application) {
     val ID_MAIN = "MAIN"
     val ID_SERVER_CONFIG = "SERVER_CONFIG"
     val KEY_SELECTED_SERVER = "SELECTED_SERVER"
     val KEY_ANG_CONFIGS = "ANG_CONFIGS"
 
+    var inputUidText by mutableStateOf("")
+    var inputAliasText by mutableStateOf("")
+
     val mainStorage by lazy { MMKV.mmkvWithID(ID_MAIN, MMKV.MULTI_PROCESS_MODE) }
     val serverStorage by lazy { MMKV.mmkvWithID(ID_SERVER_CONFIG, MMKV.MULTI_PROCESS_MODE) }
+
+    private var currentNodeConfig: NodeConfig? by mutableStateOf(null)
+
+    var scaffoldState: ScaffoldState? = null
 
     var urlCheckDialogState by mutableStateOf(false)
     private set
 
-    var deleteProxyNodeDiaglogState by mutableStateOf(DeleteProxyNodeDialogState(false, -1))
+    var deleteProxyNodeDialogState by mutableStateOf(DeleteProxyNodeDialogState(false, -1))
     private set
 
     var currentSelectedNodeIndex = 0
@@ -76,6 +84,9 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
     private var _vpnEventFlow = MutableStateFlow(false)
 
     var vpnEventFlow = _vpnEventFlow.asStateFlow()
+
+    var isChanging = false
+    private set
 
     private val mMsgReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -99,6 +110,12 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
         }
     }
 
+    fun showToast(content: String) {
+        viewModelScope.launch {
+            scaffoldState?.snackbarHostState?.showSnackbar(content)
+        }
+    }
+
     fun startListenBroadcast() {
         getApplication<App>().registerReceiver(mMsgReceiver, IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY))
         MessageUtil.sendMsg2Service(getApplication(), AppConfig.MSG_REGISTER_CLIENT, "")
@@ -110,14 +127,16 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
     }
 
     suspend fun changeProxyNode(context: Context) {
+        isChanging = true
         if (currentSelectedNodeIndex == nextSelectedNodeIndex) {
+            isChanging = false
             return
         }
         if (processChangeProxyNodeState(context)) {
             var guid = nodeStateList[currentSelectedNodeIndex].nodeInfo.guid
             mainStorage?.encode(MmkvManager.KEY_SELECTED_SERVER, guid)
         }
-
+        isChanging = false
         // Log.d("gzz", "change $guid")
     }
 
@@ -139,7 +158,7 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
         return true
     }
 
-    fun generateV2rayNodeConfig(nodeConfigList: List<NodeConfig>) {
+    private fun generateV2rayNodeConfig(nodeConfigList: List<NodeConfig>) {
         // removeServerList()
         nodeConfigList.forEach {
             val config = ServerConfig.create(it.configType)
@@ -192,13 +211,16 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
         )
     }
 
-    fun reloadServerList() {
+    fun clearDeletedNode() {
         nodeStateList.forEach {
             if (it.isDeleted) {
                 MmkvManager.removeServer(it.nodeInfo.guid)
             }
         }
         nodeStateList.clear()
+    }
+
+    fun reloadServerList() {
         var serverList = MmkvManager.decodeServerList()
         var selectedGuid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)
         serverList.forEach { guid ->
@@ -239,12 +261,12 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
     }
 
     fun startV2Ray(context: Context) {
-        V2RayServiceManager.startV2Ray(context)
+        V2RayServiceManager.startV2Ray(context,::showToast)
     }
 
     fun stopV2Ray(context: Context) {
         if (!isRunning) return
-        context.toast(R.string.toast_services_stop)
+        showToast(context.getString(R.string.toast_services_stop))
         MessageUtil.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
     }
 
@@ -261,11 +283,11 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
             context.toast("不能删除已选中的节点")
             return
         }
-        deleteProxyNodeDiaglogState = DeleteProxyNodeDialogState(true, deleteNodeIndex)
+        deleteProxyNodeDialogState = DeleteProxyNodeDialogState(true, deleteNodeIndex)
     }
 
     fun hideDeleteProxyNodeDialog() {
-        deleteProxyNodeDiaglogState = DeleteProxyNodeDialogState(false)
+        deleteProxyNodeDialogState = DeleteProxyNodeDialogState(false)
     }
 
     fun deleteProxyNode(deleteNodeIndex: Int) {
@@ -283,5 +305,56 @@ class MainViewModel(application: Application): AndroidViewModel(application) {
             return false
         }
         return true
+    }
+
+    fun parseUidByPlatform(context: Context, uid:String) {
+        viewModelScope.launch(Dispatchers.Default) {
+            var response = cardPlatformRepo.getPointConfigByUid(uid)
+            if (response.code != 200 || !response.isSuccessful)  {
+                context.toast("本地网络似乎出现了问题～")
+                return@launch
+            }
+            val jsonObject =
+                response.body?.let { Json.parseToJsonElement(it.string()) }
+            val successCode = jsonObject?.jsonObject?.get("success")?.toString()
+            val currentConfig = jsonObject?.jsonObject?.get("current")
+            if (successCode != "0") {
+                context.toast("输入UID有误～")
+                return@launch
+            }
+            var uuid = currentConfig?.jsonObject?.get("uuid")?.toString()?.replace("\"", "")
+            var add = currentConfig?.jsonObject?.get("IP")?.toString()?.replace("\"", "")
+            var port = currentConfig?.jsonObject?.get("V2Port")?.toString()
+
+            if (uuid == null || add == null || port == null) {
+                context.toast("平台下发字段缺失～")
+                return@launch
+            }
+            currentNodeConfig = NodeConfig(
+                add = add,
+                port = port,
+                id = uuid,
+            )
+//            generateV2rayNodeConfig(listOf(config))
+//            hideUrlCheckDialog()
+        }
+    }
+    fun isNeedConfigAlias() = currentNodeConfig != null
+
+    fun clearNodeConfig() {
+        currentNodeConfig = null
+    }
+
+    fun configAlias(alias: String) {
+        currentNodeConfig?.ps = alias
+        generateV2rayNodeConfig(listOf(currentNodeConfig!!))
+        clearInputText()
+        clearNodeConfig()
+        hideUrlCheckDialog()
+    }
+
+    fun clearInputText() {
+        inputUidText = ""
+        inputAliasText = ""
     }
 }

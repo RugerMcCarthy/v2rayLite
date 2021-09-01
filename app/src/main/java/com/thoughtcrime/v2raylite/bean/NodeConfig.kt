@@ -4,11 +4,11 @@ import com.google.gson.annotations.SerializedName
 
 data class NodeConfig(
     var v: String = "2",
-    var ps: String,
+    var ps: String = "Cfg_Export",
     var add: String,
     var port: String,
     var id: String,
-    var aid: String,
+    var aid: String = "4",
     var net: String = "tcp",
     var type: String = "none",
     var host: String = "",

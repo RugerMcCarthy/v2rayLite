@@ -1,20 +1,25 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
+    id ("kotlin-kapt")
+    id ("dagger.hilt.android.plugin")
 }
 
-val composeVersion: String by extra("1.0.0-rc01")
+val composeVersion: String by extra("1.0.0")
 val accompanistVersion: String by extra("0.11.1")
+val hilt_version: String by extra("2.37")
+val okhttp_version: String by extra("5.0.0-alpha.2")
+
 android{
 
-//    signingConfigs {
-//        create("android_app") {
-//            keyAlias = "v2ray_lite"
-//            storeFile = file("/Users/ruger/Tools/v2ray_lite.keystore")
-//            keyPassword = "gzz3897911"
-//            storePassword = "gzz3897911"
-//        }
-//    }
+    signingConfigs {
+        create("android_app") {
+            keyAlias = "v2ray_lite"
+            storeFile = file("/Users/ruger/Tools/v2ray_lite.keystore")
+            keyPassword = "gzz3897911"
+            storePassword = "gzz3897911"
+        }
+    }
 
     compileSdk = 30
     buildToolsVersion ("30.0.3")
@@ -72,6 +77,13 @@ android{
 
 dependencies {
 
+    // okhttp
+    implementation("com.squareup.okhttp3:okhttp:$okhttp_version")
+
+    // hilt
+    implementation("com.google.dagger:hilt-android:$hilt_version")
+    kapt("com.google.dagger:hilt-android-compiler:$hilt_version")
+
     // accompanist
     implementation("com.google.accompanist:accompanist-insets-ui:$accompanistVersion")
     implementation("com.google.accompanist:accompanist-systemuicontroller:$accompanistVersion")
@@ -83,6 +95,7 @@ dependencies {
 
     implementation ("me.drakeet.support:toastcompat:1.1.0")
     implementation ("com.google.code.gson:gson:2.8.6")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.1")
     implementation ("com.tencent:mmkv-static:1.2.7")
     implementation ("androidx.core:core-ktx:1.6.0")
     implementation ("androidx.appcompat:appcompat:1.3.0")

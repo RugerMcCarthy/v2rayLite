@@ -25,7 +25,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileDescriptor
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.lang.ref.SoftReference
+import com.thoughtcrime.v2raylite.util.IpHeader
+
+
+
 
 class V2rayLiteVpnService: VpnService(), ServiceControl {
     private val settingsStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_SETTING, MMKV.MULTI_PROCESS_MODE) }
@@ -66,6 +73,11 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
         V2RayServiceManager.serviceControl = SoftReference(this)
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        V2RayServiceManager.startV2rayPoint()
+        return START_STICKY
+    }
+
     override fun onRevoke() {
         stopV2Ray()
     }
@@ -81,7 +93,7 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
     }
 
     private fun setup(parameters: String) {
-
+        Log.d("gzz", "parameters: $parameters")
         val prepare = prepare(this)
         if (prepare != null) {
             return
@@ -91,11 +103,15 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
         val enableLocalDns = settingsStorage?.decodeBool(AppConfig.PREF_LOCAL_DNS_ENABLED) ?: false
         val routingMode = settingsStorage?.decodeString(AppConfig.PREF_ROUTING_MODE) ?: "0"
 
+        var mtu = 0;
         parameters.split(" ")
             .map { it.split(",") }
             .forEach {
                 when (it[0][0]) {
-                    'm' -> builder.setMtu(java.lang.Short.parseShort(it[1]).toInt())
+                    'm' -> {
+                        mtu = java.lang.Short.parseShort(it[1]).toInt()
+                        builder.setMtu(mtu)
+                    }
                     's' -> builder.addSearchDomain(it[1])
                     'a' -> builder.addAddress(it[1], Integer.parseInt(it[2]))
                     'r' -> {
@@ -167,8 +183,28 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
         }
 
         sendFd()
+
+        // hook(mInterface.fileDescriptor, mtu)
     }
 
+    private fun hook(fileDescriptor: FileDescriptor, mtu: Int) {
+        var inputStream = FileInputStream(fileDescriptor)
+        var outputStream = FileOutputStream(fileDescriptor)
+        GlobalScope.launch {
+            while (true) {
+                var packet = ByteArray(mtu)
+                try {
+                    var length = inputStream.read(packet)
+                    var ipHeader = IpHeader(packet, 0)
+                    Log.d("gzz", "ipHeader sourceIp: ${Utils.convertIp(ipHeader.sourceIp)} targetIp: ${Utils.convertIp(ipHeader.destinationIp)}")
+                    outputStream.write(packet, 0, length)
+                } catch (e: Exception) {
+                    Log.d("gzz", "error: ${packet}")
+                }
+
+            }
+        }
+    }
     private fun sendFd() {
         val fd = mInterface.fileDescriptor
         val path = File(Utils.packagePath(applicationContext), "sock_path").absolutePath
@@ -190,11 +226,6 @@ class V2rayLiteVpnService: VpnService(), ServiceControl {
                 tries += 1
             }
         }
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        V2RayServiceManager.startV2rayPoint()
-        return START_STICKY
     }
 
     private fun stopV2Ray(isForced: Boolean = true) {

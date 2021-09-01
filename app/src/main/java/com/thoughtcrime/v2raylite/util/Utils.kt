@@ -153,4 +153,11 @@ object Utils {
         return String(Base64.decode(str, Base64.DEFAULT))
     }
 
+
+    fun convertIp(ip: Int): String {
+        return String.format(
+            "%s.%s.%s.%s", ip shr 24 and 0x00FF,
+            ip shr 16 and 0x00FF, ip shr 8 and 0x00FF, ip and 0x00FF
+        )
+    }
 }

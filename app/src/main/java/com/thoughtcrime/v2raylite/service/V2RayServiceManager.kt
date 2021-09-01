@@ -67,11 +67,11 @@ object V2RayServiceManager {
     private var mSubscription: Subscription? = null
     private var mNotificationManager: NotificationManager? = null
 
-    fun startV2Ray(context: Context) {
+    fun startV2Ray(context: Context, toast: (String) -> Unit) {
         if (settingsStorage?.decodeBool(AppConfig.PREF_PROXY_SHARING) == true) {
-            context.toast(R.string.toast_warning_pref_proxysharing_short)
+            toast(context.getString(R.string.toast_warning_pref_proxysharing_short))
         }else{
-            context.toast(R.string.toast_services_start)
+            toast(context.getString(R.string.toast_services_start))
         }
         val intent = Intent(context.applicationContext, V2rayLiteVpnService::class.java)
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) {
