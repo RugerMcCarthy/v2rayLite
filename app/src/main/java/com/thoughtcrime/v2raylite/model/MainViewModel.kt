@@ -308,8 +308,10 @@ class MainViewModel @Inject constructor(application: Application, private val ca
     }
 
     fun parseUidByPlatform(context: Context, uid:String) {
-        viewModelScope.launch(Dispatchers.Default) {
-            var response = cardPlatformRepo.getPointConfigByUid(uid)
+        viewModelScope.launch(Dispatchers.Main) {
+            var response = withContext(Dispatchers.IO) {
+                cardPlatformRepo.getPointConfigByUid(uid)
+            }
             if (response.code != 200 || !response.isSuccessful)  {
                 context.toast("本地网络似乎出现了问题～")
                 return@launch
