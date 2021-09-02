@@ -319,7 +319,7 @@ class MainViewModel @Inject constructor(application: Application, private val ca
             val jsonObject =
                 response.body?.let { Json.parseToJsonElement(it.string()) }
             val successCode = jsonObject?.jsonObject?.get("success")?.toString()
-            val currentConfig = jsonObject?.jsonObject?.get("current")
+            val currentConfig = jsonObject?.jsonObject?.get("data")
             if (successCode != "0") {
                 context.toast("输入UID有误～")
                 return@launch
